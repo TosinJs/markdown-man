@@ -12,12 +12,11 @@ import (
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/microcosm-cc/bluemonday"
-	"github.com/pkg/browser"
 	"github.com/yuin/goldmark"
 )
 
 const (
-	header = `<!DOCTYPE html>
+	header = `
 		<html lang="en">
 		<head>
 			<meta charset="UTF-8">
@@ -77,9 +76,9 @@ func run(filename string, w io.Writer) error {
 	default:
 		return fmt.Errorf("invalid input file")
 	}
-
-	saveFile(outputFileName, data)
-	return browser.OpenFile(outputFileName)
+	fmt.Println(w, outputFileName)
+	return saveFile(outputFileName, data)
+	// return browser.OpenFile(outputFileName)
 }
 
 func parseToHtml(input []byte) ([]byte, error) {
