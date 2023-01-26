@@ -7,14 +7,29 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
-	"time"
+	"strings"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/microcosm-cc/bluemonday"
+	"github.com/pkg/browser"
 	"github.com/yuin/goldmark"
+)
+
+const (
+	header = `<!DOCTYPE html>
+		<html lang="en">
+		<head>
+			<meta charset="UTF-8">
+			<meta http-equiv="X-UA-Compatible" content="IE=edge">
+			<meta name="viewport" content="width=device-width, initial-scale=1.0">
+			<title>Document</title>
+		</head>
+		<body>`
+
+	footer = `
+		</body>
+		</html>`
 )
 
 func main() {
@@ -38,38 +53,33 @@ func run(filename string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	str, err := filepath.Abs(filename)
+	if err != nil {
+		return err
+	}
+
 	var data []byte
-	var tempFileStr string
+	var outputFileName = strings.TrimSuffix(str, ext)
+
 	switch ext {
 	case ".html":
 		data, err = parseToMd(inputFile)
 		if err != nil {
 			return err
 		}
-		tempFile, err := ioutil.TempFile("", "mdp*.md")
-		if err != nil {
-			return err
-		}
-		tempFileStr = tempFile.Name()
-		if err != nil {
-			return err
-		}
+		outputFileName = fmt.Sprintf("%s.mm.md", outputFileName)
 	case ".md":
 		data, err = parseToHtml(inputFile)
 		if err != nil {
 			return err
 		}
-		tempFile, err := ioutil.TempFile("", "mdp*.html")
-		if err != nil {
-			return err
-		}
-		tempFileStr = tempFile.Name()
+		outputFileName = fmt.Sprintf("%s.mm.html", outputFileName)
 	default:
 		return fmt.Errorf("invalid input file")
 	}
-	fmt.Fprintln(w, tempFileStr)
-	saveFile(tempFileStr, data)
-	return preview(tempFileStr)
+
+	saveFile(outputFileName, data)
+	return browser.OpenFile(outputFileName)
 }
 
 func parseToHtml(input []byte) ([]byte, error) {
@@ -80,12 +90,14 @@ func parseToHtml(input []byte) ([]byte, error) {
 	}
 	body := bluemonday.UGCPolicy().SanitizeBytes(output.Bytes())
 	var buffer bytes.Buffer
+	buffer.WriteString(header)
 	buffer.Write(body)
+	buffer.WriteString(footer)
 	return buffer.Bytes(), nil
 }
 
 func parseToMd(input []byte) ([]byte, error) {
-	converter := md.NewConverter("", true, nil)
+	converter := md.NewConverter("", true, nil).Remove("title")
 	markdown, err := converter.ConvertBytes(input)
 	if err != nil {
 		return []byte{}, err
@@ -94,31 +106,5 @@ func parseToMd(input []byte) ([]byte, error) {
 }
 
 func saveFile(outname string, data []byte) error {
-	return ioutil.WriteFile("name", data, 0446)
-}
-
-func preview(fname string) error {
-	cName := ""
-	cParams := []string{}
-
-	switch runtime.GOOS {
-	case "linux":
-		cName = "xdg-open"
-	case "windows":
-		cName = "cmd.exe"
-		cParams = []string{"/C", "start"}
-	case "darwin":
-		cName = "open"
-	default:
-		return fmt.Errorf("OS not Supported")
-	}
-
-	cParams = append(cParams, fname)
-	cPath, err := exec.LookPath(cName)
-	if err != nil {
-		return err
-	}
-	err = exec.Command(cPath, cParams...).Run()
-	time.Sleep(2 * time.Second)
-	return err
+	return ioutil.WriteFile(outname, data, 0446)
 }
