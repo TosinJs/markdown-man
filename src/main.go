@@ -6,12 +6,15 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/microcosm-cc/bluemonday"
+	"github.com/pkg/browser"
 	"github.com/yuin/goldmark"
 )
 
@@ -33,6 +36,7 @@ const (
 
 func main() {
 	fileName := flag.String("file", "", "File to Be Worked On. Either HTML file or Markdown")
+	skipPreview := flag.Bool("s", false, "Skip File Preview")
 	flag.Parse()
 
 	if *fileName == "" {
@@ -40,13 +44,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := run(*fileName, os.Stdout); err != nil {
+	if err := run(*fileName, *skipPreview, os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(filename string, w io.Writer) error {
+func run(filename string, skipPreview bool, w io.Writer) error {
 	ext := filepath.Ext(filename)
 	inputFile, err := ioutil.ReadFile(filename)
 	if err != nil {
@@ -59,26 +63,32 @@ func run(filename string, w io.Writer) error {
 
 	var data []byte
 	var outputFileName = strings.TrimSuffix(str, ext)
-
+	rand.Seed(time.Now().UnixNano())
 	switch ext {
 	case ".html":
 		data, err = parseToMd(inputFile)
 		if err != nil {
 			return err
 		}
-		outputFileName = fmt.Sprintf("%s.mm.md", outputFileName)
+		outputFileName = fmt.Sprintf("%s%v.mm.md", outputFileName, rand.Intn(100))
 	case ".md":
 		data, err = parseToHtml(inputFile)
 		if err != nil {
 			return err
 		}
-		outputFileName = fmt.Sprintf("%s.mm.html", outputFileName)
+		outputFileName = fmt.Sprintf("%s%v.mm.html", outputFileName, rand.Intn(100))
 	default:
 		return fmt.Errorf("invalid input file")
 	}
-	fmt.Println(w, outputFileName)
-	return saveFile(outputFileName, data)
-	// return browser.OpenFile(outputFileName)
+
+	err = saveFile(outputFileName, data)
+	if err != nil {
+		return err
+	}
+	if skipPreview {
+		return nil
+	}
+	return browser.OpenFile(outputFileName)
 }
 
 func parseToHtml(input []byte) ([]byte, error) {
